@@ -4,6 +4,10 @@ import in.navi.moneymanager.dto.ProfileDTO;
 import in.navi.moneymanager.entity.ProfileEntity;
 import in.navi.moneymanager.repository.ProfileRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -14,6 +18,8 @@ public class ProfileService {
 
     private  final ProfileRepository profileRepository;
     private final EmailService emailService;
+    private final PasswordEncoder passwordEncoder;
+
     public ProfileDTO registerProfile(ProfileDTO profileDTO){
         ProfileEntity newProfile = toEntity(profileDTO);
         newProfile.setActivationToken(UUID.randomUUID().toString());
@@ -31,7 +37,7 @@ public class ProfileService {
                 .id(profileDTO.getId())
                 .fullName(profileDTO.getFullName())
                 .email(profileDTO.getEmail())
-                .password(profileDTO.getPassword())
+                .password(passwordEncoder.encode(profileDTO.getPassword()))
                 .profileImageUrl(profileDTO.getProfileImageUrl())
                 .createdAt(profileDTO.getCreatedAt())
                 .updateAt(profileDTO.getUpdateAt()).build();
@@ -57,4 +63,36 @@ public class ProfileService {
                 })
                 .orElse(false);
     }
+
+    public boolean isAccountActive(String email){
+        return profileRepository.findByEmail(email)
+                .map(ProfileEntity::getIsActive)
+                .orElse(false);
+    }
+
+    public ProfileEntity getCurrentProfile(){
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return profileRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new UsernameNotFoundException("Profile not a found with email: " + authentication.getName()));
+
+    }
+
+    public ProfileDTO getPublicProfile(String email){
+        ProfileEntity currentUser = null;
+        if(email == null){
+            currentUser = getCurrentProfile();
+        }else{
+            currentUser = profileRepository.findByEmail(email)
+                    .orElseThrow(() -> new UsernameNotFoundException("Profile not a found with email: " + email));
+        }
+        return ProfileDTO.builder()
+                .id(currentUser.getId())
+                .fullName((currentUser.getFullName()))
+                .email(currentUser.getEmail())
+                .profileImageUrl(currentUser.getProfileImageUrl())
+                .createdAt(currentUser.getCreatedAt())
+                .updateAt(currentUser.getUpdateAt())
+                .build();
+    }
+
 }
